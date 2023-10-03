@@ -165,6 +165,7 @@ def parse():
             if champ_title not in TO_SKIP: championships_links.append(data)
             print(f'{champ_title}: {link}') ##
         
+    print(championships_links)
 
     for data in championships_links:
         link = data[0]
@@ -189,23 +190,24 @@ def parse():
         quotations.close()
 
     print(f'\nFile {ext}_{date_time}.csv completato.\n') ##
+
     return
 
 
 now = datetime.now()
 date_time = now.strftime('%Y%m%d_%H%M')
 
+'''
 # live parsing
 live = True
 driver.get(live_matches)
 driver.maximize_window()
 parse()
-# line parsing
 '''
+# line parsing
 live = False
 driver.get(line_matches)
 driver.maximize_window()
 parse()
-'''
 
 driver.close()
