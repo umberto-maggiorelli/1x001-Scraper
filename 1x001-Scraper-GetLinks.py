@@ -14,29 +14,28 @@ line_matches = 'https://1x001.com/it/line/football' # link pagina partite line
 
 MATCHES_INFO = []
 
-# aggiungere eventuali altri nomi di sezioni da non prendere in considerazione per il parsing
+# section to skip during while parsing the website
 TO_SKIP = ['Speciali scommesse sul giorno della partita']
 
 
-service = Service(r'/home/umberto/Scrivania/Sviluppo/Personale/1x001-Scraper/geckodriver')#r'./geckodriver')
+service = Service(r'./geckodriver')
 driver = Firefox(service = service)
 
-
-def get_URL_ID(match):
+# Extract the url and id of the match
+def get_url_id(match):
     match_info = match.find_element(By.XPATH, './div/a')
     url = match_info.get_attribute('href')
     parts = url.split('/')
     new_url = '/'.join(parts[:-1]) # Remove the last part
     id_match = re.findall("/[0-9]+-", new_url)
-    print(id_match)
     id = id_match[0][1:-1]
     return new_url, id
 
+# Extract the date and hour of the match
 def get_match_time(match):
     match_time_str = match.find_element(By.XPATH, './div/div/div[2]/span').text
     parts = match_time_str.split('/')
-    # Extract the date and hour
-    if len(parts) >= 5:
+    if len(parts) >= 4:
         date = f'{parts[0].strip()}/{parts[1].strip()}/{parts[2].strip()}'
         hour = parts[3].strip()
     else:
@@ -44,41 +43,55 @@ def get_match_time(match):
         hour = ""
     return date, hour
 
-def get_championship_info(championship, championship_title):
-    matches = WebDriverWait(championship, 30).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
+# Push championship title, url, id, date, hour in MATCHES_INFO
+def get_matches_info(matches, championship_title):
     for match in matches:
-        url, id = get_URL_ID(match)
+        url, id = get_url_id(match)
         date, hour = get_match_time(match)
         data = (championship_title, url, id, date, hour)
         MATCHES_INFO.append(data)
         print(f'{data}') ##
 
-# Controlla se per una nazione esistono sottocampionati (es. Italia/Serie A; Italia/Serie B)  
+# Check if for a given 'nationality' exist sub championships (es. Italia/Serie A; Italia/Serie B)  
 def check_if_matches(champ_element):
     attr = champ_element.get_attribute('class')
     return True if attr == 'ui-nav-item sports-menu-game' else False
 
-def try_recursive(championships):
+# Extract fundamentals info from every championship
+def process_championships(championships):
     for championship in championships:
-        champ = WebDriverWait(championship, 30).until(EC.element_to_be_clickable((By.XPATH, './div')))
-        champ_title = champ.get_attribute('title')
-        if champ_title in TO_SKIP: continue
-        print(champ_title) ##
-        WebDriverWait(championship, 30).until(EC.element_to_be_clickable(champ))
-        champ.location_once_scrolled_into_view
-        champ.click()
-        champ_elements = WebDriverWait(championship, 30).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
-        found_matches = check_if_matches(champ_elements[0])
-        print(found_matches)
-        if found_matches:
-            get_championship_info(championship, champ_title)
+        try:
+            champ = WebDriverWait(championship, 30).until(EC.element_to_be_clickable((By.XPATH, './div')))
+            champ_title = champ.get_attribute('title')
+            if champ_title in TO_SKIP: continue
+            print(champ_title) ##
+            WebDriverWait(championship, 30).until(EC.element_to_be_clickable(champ))
+            champ.location_once_scrolled_into_view
             champ.click()
-        else:
-            subchampionships = WebDriverWait(championship, 20).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
-            print(f'Number of subchampionships n: {len(subchampionships)}')
-            try_recursive(subchampionships)
+            champ_elements = WebDriverWait(championship, 30).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
+        except Exception:
+            continue
 
-def parse():
+        try:
+            found_matches = check_if_matches(champ_elements[0])
+        except Exception:
+            print("Exception: check_if_matches catched")
+            champ.click()
+            continue
+        else:
+            if found_matches:
+                try:
+                    get_matches_info(champ_elements, champ_title)
+                except Exception:
+                    print("Exception get_matches_info catched")
+                champ.click()
+            else:
+                subchampionships = WebDriverWait(championship, 20).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
+                print(f'Number of subchampionships n: {len(subchampionships)}')
+                process_championships(subchampionships)
+
+# Init the parsing of the website: section 'Calcio'
+def parse_init():
     sleep(5) ##
     sports_menu = WebDriverWait(driver, 50).until(EC.presence_of_element_located((By.CLASS_NAME, 'sports-menu'))) # menù 'Sport'
     sports_menu_main = WebDriverWait(sports_menu, 50).until(EC.presence_of_element_located((By.CLASS_NAME, 'sports-menu-main-full__inner')))
@@ -92,50 +105,15 @@ def parse():
     
     championships = WebDriverWait(sport, 50).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
     print(f'Number of championships n: {len(championships)}')
-    try_recursive(championships[:15])
-    '''
-    championships = WebDriverWait(sport, 50).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
-    print(f'Number of championships n: {len(championships)}')
-    for championship in championships[:15]:
-        champ = WebDriverWait(championship, 30).until(EC.element_to_be_clickable((By.XPATH, './div')))
-        champ_title = champ.get_attribute('title')
-        if champ_title in TO_SKIP: continue
-        print(champ_title) ##
-        WebDriverWait(championship, 30).until(EC.element_to_be_clickable(champ))
-        champ.location_once_scrolled_into_view
-        champ.click()
-        champ_elements = WebDriverWait(championship, 30).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
-        found_matches = check_if_matches(champ_elements[0])
-        print(found_matches)
-        if found_matches:
-            get_championship_info(championship, champ_title)
-            champ.click()
-        else:
-            subchampionships = WebDriverWait(championship, 20).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
-            print(f'Number of subchampionships n: {len(subchampionships)}')
-            for subchampionship in subchampionships:
-                subchamp = WebDriverWait(subchampionship, 30).until(EC.element_to_be_clickable((By.XPATH, './div')))
-                subchamp_title = subchamp.get_attribute('title')
-                print(subchamp_title) ##
-                WebDriverWait(subchampionship, 30).until(EC.element_to_be_clickable(subchamp))
-                subchamp.location_once_scrolled_into_view
-                subchamp.click()
-                subchamp_elements = WebDriverWait(championship, 30).until(EC.presence_of_all_elements_located((By.XPATH, './ul/li')))
-                found_matches = check_if_matches(subchamp_elements[0])
-                print(found_matches)
-                if found_matches:
-                    get_championship_info(subchampionship, subchamp_title)
-                    subchamp.click()
-                #get_championship_info(subchampionship, subchamp_title)
-                #subchamp.click()
-    '''
-
+    process_championships(championships)
     #print(MATCHES_INFO)
 
-    # scrive file delle quote
+
+# Write the matches urls file 
+def write_file():
     if live: ext = 'live'
     else: ext = 'line'
-    with open(f'{ext}_links_{date_time}.csv', 'w') as matches_file: #, encoding="utf-8"
+    with open(f'{ext}_urls_{date_time}.csv', 'w') as matches_file: #, encoding="utf-8"
         if live:
             for info in MATCHES_INFO:
                 matches_file.write(f'{info[0]},{info[1]},{info[2]},{info[3]},{info[4]}\n')
@@ -144,9 +122,8 @@ def parse():
                 matches_file.write(f'{info[0]},{info[1]},{info[2]},{info[3]},{info[4]}\n')
         matches_file.close()
 
-    print(f'\nFile {ext}_links_{date_time}.csv completato.\n') ##
+    print(f'\nFile {ext}_urls_{date_time}.csv completato.\n') ##
     return
-
 
 now = datetime.now()
 date_time = now.strftime('%Y%m%d_%H%M')
@@ -155,6 +132,6 @@ date_time = now.strftime('%Y%m%d_%H%M')
 live = False # line parsing
 driver.get(live_matches) if live else driver.get(line_matches)
 driver.maximize_window()
-parse()
-
+parse_init()
+write_file()
 driver.close()
